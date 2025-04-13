@@ -1,0 +1,53 @@
+    I would like to replace FILE985
+Subject:  I would like to replace FILE985
+From:     M Lewin <mlewin@ymail.com>
+Date:     12/6/2021, 6:47 AM
+To:       Sam Golob <sbgolob@cbttape.org>
+
+Dear Sam,
+
+I hope that you are in good health.
+
+I would like to ask you the following favor:
+
+I would like to replace the present FILE985
+(File # 985 REXX execs from Marius Lewin)
+with the replacement file that I join.
+
+I added the following rexx execs:
+
+editload    a rexx to edit a load module/program object by
+                       accessing a IEBCOPY unloaded copy with
+                       RECFM=VB and not VBS.
+viewload    a rexx to execute an edit macro on a load
+                       module/program object.
+editxmit    a rexx to edit a load module/program object by
+                       accessing a XMITted copy.
+july        a rexx to convert from a Julian date to a Gregorian
+                       date or reverse.
+lk          a rexx to give the  linkedit/bind date of a load
+                       module/program object
+TOPDSE      a JCL example to copy a PDS or a PDSE to a PDSE
+                      changing optionnally the primary and
+                      secondary allocations.
+COBOLCK     a rexx which gives the main characteristics of a
+                      COBOL source program.
+SOURCE      a rexx which extracts the COBOL source from a program
+                      object of a COBOL program compiled with
+                       TEST(DWARF,SOURCE).
+
+
+ The original source PDS was XMITed and downloaded in binary by FTP.
+ The XMIted file contains a $$README summary member and an
+ acknowledgment member named ACK.
+
+ I join the XMITed file.
+
+ I thank you for making my rexx execs available on cbttape.org.
+
+ All the best of everything to you and your family.
+
+
+ Marius Lewin
+ marius.lewin@gmail.com
+

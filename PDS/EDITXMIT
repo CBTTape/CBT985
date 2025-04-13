@@ -1,0 +1,218 @@
+/* rexx */
+trace o
+
+/*________________________________________________________________*/
+/*                                                                */
+/* Edit a library or a library member thru its XMITed form        */
+/* with no change of record sizes.                                */
+/* Input library may have fixed, variable and undefined           */
+/* record formats.                                                */
+/* XMIT and RECEIVE are using IEBCOPY UNLOAD "under the hood"     */
+/* This rexx was at first designed to edit a                      */
+/* load module/program object, then was extended.                 */
+
+/*                                                                */
+/* Kindly note:                                                   */
+/* The original library or library member is not saved.           */
+/* Please save the original library for safety.                   */
+/*________________________________________________________________*/
+
+   /* Examples of use:
+
+   1) In ISPF 3.4:
+   DSLIST - Data Sets Matching ABC
+   Command ===>
+
+   Command - Enter "/" to select actio
+   -----------------------------------
+   editxmit ABC.LOAD           <-- process all library
+
+   2) In ISPF 3.4:
+   DSLIST - Data Sets Matching ABC
+   Command ===>
+
+   Command - Enter "/" to select actio
+   -----------------------------------
+   editxmit / M1 XYZ  <-- process all library with macro M1
+                          and macro parameter XYZ
+
+   3) In a member list:
+   VIEW              ABC.LOAD
+   Command ===>
+              Name     Prompt        Alias-of     Size
+   editxmit_ MEMBER1                            000086A8
+   _________ MEMBER2                            00008E80
+
+   4) On the command line:
+   VIEW              ABC.LOAD
+   Command ===> tso editxmit 'ABC.LOAD(MEMBER1)'
+
+   5) In a member list:
+   VIEW              ABC.LOAD
+   Command ===>
+              Name     Prompt        Alias-of     Size
+   editxmit_ MEMBER1   M1 DEF                   000086A8
+   _________ MEMBER2                            00008E80
+
+   Change all 'ABC' by 'DEF'
+   Content of edit macro M1:
+   /* rexx */
+   address isredit
+   "macro (parm)"
+   "c ABC "parm" all"
+   "save"
+   "end"
+   exit
+
+   6) On the command line:
+   VIEW              ABC.LOAD
+   Command ===> tso editxmit 'ABC.LOAD(MEMBER1)' M1 DEF
+
+   7) On the command line:
+   VIEW              ABC.LOAD
+   Command ===> cmde
+   Enter TSO commands below:
+   ===> editxmit 'ABC.LOAD(MEMBER1)' M1 DeF
+   (for case sensitivity)
+
+   8) In a member list:
+   VIEW              ABC.LOAD
+   Command ===>
+              Name     Prompt        Alias-of     Size
+   editxmit_ MEMBER1   hex                      000086A8
+   _________ MEMBER2                            00008E80
+
+   */
+
+parse arg dsn macro parm
+/* macro and parm for macro optional                              */
+dsn = strip(dsn,,"'")                /* remove surrounding quotes */
+parse var dsn dsn '(' member ')' .   /* extract member if present */
+/* Sequential dataset dsnseq to edit                              */
+if member = '' then dsnseq = dsn".SEQ"
+               else dsnseq = dsn"."member".SEQ"
+/*__________________________________________________________*/
+/*                  SUMMARY                                 */
+/* 1) Unload as a sequential file with XMIT                 */
+/* 2) Edit the sequential file in place                     */
+/* 3) Load from sequential file with RECEIVE                */
+/*__________________________________________________________*/
+
+/*__________________________________________________________*/
+
+/* 1) Unload to a sequential file with XMIT                 */
+
+/* Allocate input file I                                    */
+"alloc f(i) da('"dsn"') shr reu"
+  call check_rc rc,0,
+   "Unload step. Input dataset "dsn" allocation."
+
+/* Allocate output file ddseq                               */
+xmsg = msg(off)
+  "free dd(ddseq)"
+  "del '"dsnseq"'"
+xmsg = msg(xmsg)
+"alloc f(ddseq) da('"dsnseq"') reu",
+"unit(sysallda) tr sp(15 150) recfm(f b) lrecl(80) blksize(3120)"
+  call check_rc rc,0,
+   "Unload step. Output dataset "dsnseq" allocation."
+
+if member = '' then mem = ''
+               else mem = "mem("member")"
+"xmit a.b fi(i) "mem,
+"outf(ddseq) nolog noprolog noepilog nonotify nowarn"
+
+unload_clean_up:
+"free f(i)"
+
+/*__________________________________________________________*/
+
+/* 2) Edit sequential dataset                               */
+
+address ispexec
+"control errors return"
+
+"lminit dataid(dd1) ddname(ddseq) enq(shr)"
+  call check_rc rc,0,"lminit"
+
+parse source . . rexxname . /* rexxname in upper case       */
+zedsmsg = rexxname          /* displayed top right          */
+"setmsg msg(isrz000)"
+
+if macro = "" then do
+   macro = "res"        /* res: RESET command               */
+   parm  = ""
+end /* if macro = ""                                        */
+"edit dataid("dd1") macro("macro") parm(parm)"
+/* macro accesses parm thru e.g. "isredit macro (parm)"     */
+  call check_rc rc,4,"edit"
+
+"lmfree dataid("dd1")"
+  call check_rc rc,0,"lmfree"
+
+address /* from ispexec                                     */
+
+/*__________________________________________________________*/
+
+say "Please type "y" or "Y" to confirm updating the original file."
+say "Any other answer will not update."
+say "This rexx does not save the original file."
+"newstack"
+pull answer /* caps                                         */
+"delstack"
+if answer <> 'Y' then do
+   xmsg = msg(off)
+     "free dd(ddseq)"
+     "del '"dsnseq"'"
+   xmsg = msg(xmsg)
+   say "No update."
+   exit
+end /* if answer <> 'Y'                                     */
+
+/*__________________________________________________________*/
+
+/* 3) Load from sequential file with replacement            */
+/*    with RECEIVE                                          */
+"newstack"
+/* indicate receiving dataset and its disposition           */
+queue "ds('"dsn"') shr"
+/* nullfile: do not write on userid.LOG.MISC                */
+prompt_prev = prompt("on")
+"receive inf(ddseq) logda(nullfile)"
+"delstack"
+
+load_clean_up:
+xmsg = msg(off)
+  "free dd(ddseq)"
+  "del '"dsnseq"'"
+xmsg = msg(xmsg)
+
+exit
+
+/*__________________________________________________________*/
+check_rc:
+trace_previous = trace("o") /* no trace                     */
+
+ /* call example:    call check_rc rc,0,'libdef isptlib'    */
+ /* In case of error:
+ ZEDMSGNO (message identifier), ZEDISMSG (short message text) and ZEDILMSG
+ */
+ if arg(1)<=arg(2) then do
+    return
+    trace(trace_previous)
+ end /* if arg(1)<=arg(2)                                   */
+ /* ISPEXEC or ISREDIT error:                               */
+ if ZERRSM   <> 'ZERRSM'   then say 'ZERRSM   = 'ZERRSM
+ if ZERRLM   <> 'ZERRLM'   then say 'ZERRLM   = 'ZERRLM
+ if ZEDMSGNO <> 'ZEDMSGNO' then say 'ZEDMSGNO = 'ZEDMSGNO
+ if ZEDISMSG <> 'ZEDISMSG' then say 'ZEDISMSG = 'ZEDISMSG
+ if ZEDILMSG <> 'ZEDILMSG' then say 'ZEDILMSG = 'ZEDILMSG
+ say 'rc = 'arg(1)
+ if debug='DEBUG' then do
+   say arg(3) 'RC='arg(1)
+   if zerrmsg <> '' & zerrmsg <> 'ZERRMSG' then say 'ZERRMSG='zerrmsg
+ end /* if debug='DEBUG'                                    */
+ zispfrc = 16
+ if sysvar(sysispf) = 'ACTIVE' then address ispexec "vput zispfrc"
+ exit zispfrc
+/*__________________________________________________________*/
